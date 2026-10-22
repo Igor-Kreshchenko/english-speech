@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Озвучка списка фраз</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #172033;
+        background: #f4f6fa;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 32px 16px; }
+      main {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 28px;
+        background: white;
+        border: 1px solid #e2e7ef;
+        border-radius: 16px;
+        box-shadow: 0 12px 36px #1720330d;
+      }
+      h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 4vw, 2rem); }
+      .intro { margin: 0 0 24px; color: #596579; line-height: 1.5; }
+      label, legend { font-weight: 650; }
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 210px;
+        margin: 8px 0 10px;
+        padding: 12px;
+        resize: vertical;
+        border: 1px solid #cbd3df;
+        border-radius: 8px;
+        font: inherit;
+        line-height: 1.5;
+      }
+      input, select {
+        width: 100%;
+        min-height: 42px;
+        margin-top: 7px;
+        padding: 8px 10px;
+        border: 1px solid #cbd3df;
+        border-radius: 8px;
+        background: white;
+        color: inherit;
+        font: inherit;
+      }
+      input[type="file"] { border: 0; padding: 5px 0; }
+      .hint { color: #697589; font-size: .9rem; }
+      .settings {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin: 24px 0;
+      }
+      fieldset {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin: 0;
+        padding: 16px;
+        border: 1px solid #e2e7ef;
+        border-radius: 10px;
+      }
+      .voice-picker { min-width: 0; }
+      .voice-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+      .voice-actions button { flex: 0 0 auto; min-height: 38px; }
+      .voice-actions audio { min-width: 0; }
+      .secondary-button { background: #e8eefc; color: #1e438e; }
+      #voiceStatus { grid-column: 1 / -1; margin: 0; color: #596579; font-size: .9rem; }
+      legend { padding: 0 6px; }
+      button {
+        min-height: 44px;
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 8px;
+        background: #2457d6;
+        color: white;
+        font: inherit;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button:disabled { cursor: wait; opacity: .65; }
+      progress { width: 100%; height: 14px; margin-top: 20px; accent-color: #2457d6; }
+      #status { min-height: 24px; margin: 8px 0 16px; color: #596579; }
+      #error { color: #b42318; }
+      #result { display: grid; gap: 14px; }
+      audio { width: 100%; }
+      #download { justify-self: start; text-decoration: none; }
+      @media (max-width: 600px) {
+        main { padding: 20px; }
+        .settings, fieldset { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Озвучка списка фраз</h1>
+      <p class="intro">
+        Каждая непустая строка — одна пара в формате
+        <code>Русская фраза -&gt; English translation</code>.
+      </p>
+
+      <form id="form">
+        <label for="phrases">Список фраз</label>
+        <textarea id="phrases" name="text" required placeholder="Здравствуйте. -> Hello.&#10;Как дела? -> How are you?"></textarea>
+        <label for="file">Загрузить список из .txt</label>
+        <input id="file" type="file" accept=".txt,text/plain">
+        <div class="hint">До 100 пар, максимум 20 000 символов. Пустые строки игнорируются.</div>
+
+        <div class="settings">
+          <label for="translationPause">
+            Пауза между фразами (сек.)
+            <input id="translationPause" name="translationPause" type="number" min="0" max="30" step="0.5" value="3" required>
+          </label>
+          <label for="pairPause">
+            Между парами (после перевода, сек.)
+            <input id="pairPause" name="pairPause" type="number" min="0" max="30" step="0.5" value="2" required>
+          </label>
+          <fieldset>
+            <legend>Голоса</legend>
+            <div class="voice-picker">
+              <label for="ruVoice">Русский
+                <select id="ruVoice" name="ruVoice" disabled></select>
+              </label>
+              <div class="voice-actions">
+                <button id="previewRu" class="secondary-button" type="button" disabled>Прослушать</button>
+                <audio id="previewRuAudio" controls hidden aria-label="Образец русского голоса"></audio>
+              </div>
+            </div>
+            <div class="voice-picker">
+              <label for="enVoice">Английский
+                <select id="enVoice" name="enVoice" disabled></select>
+              </label>
+              <div class="voice-actions">
+                <button id="previewEn" class="secondary-button" type="button" disabled>Прослушать</button>
+                <audio id="previewEnAudio" controls hidden aria-label="Образец английского голоса"></audio>
+              </div>
+            </div>
+            <p id="voiceStatus" role="status" aria-live="polite">Загрузка доступных голосов...</p>
+          </fieldset>
+        </div>
+
+        <button id="generate" type="submit">Сгенерировать аудио</button>
+      </form>
+
+      <progress id="progress" max="100" value="0" hidden></progress>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="error" role="alert"></p>
+      <section id="result" hidden aria-label="Результат генерации">
+        <audio id="player" controls></audio>
+        <a id="download" href="#" download="english-speech.mp3">
+          <button type="button">Скачать MP3</button>
+        </a>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("#form");
+      const generateButton = document.querySelector("#generate");
+      const fileInput = document.querySelector("#file");
+      const textInput = document.querySelector("#phrases");
+      const progress = document.querySelector("#progress");
+      const status = document.querySelector("#status");
+      const error = document.querySelector("#error");
+      const result = document.querySelector("#result");
+      const player = document.querySelector("#player");
+      const download = document.querySelector("#download");
+      const voiceStatus = document.querySelector("#voiceStatus");
+      const voiceSettings = {
+        ru: {
+          select: document.querySelector("#ruVoice"),
+          button: document.querySelector("#previewRu"),
+          audio: document.querySelector("#previewRuAudio"),
+          defaultVoice: "ru-RU-DmitryNeural",
+        },
+        en: {
+          select: document.querySelector("#enVoice"),
+          button: document.querySelector("#previewEn"),
+          audio: document.querySelector("#previewEnAudio"),
+          defaultVoice: "en-US-GuyNeural",
+        },
+      };
+      const previewUrls = new Map();
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        try {
+          textInput.value = await file.text();
+          error.textContent = "";
+        } catch {
+          error.textContent = "Не удалось прочитать выбранный файл.";
+        }
+      });
+
+      async function requestJson(url, options) {
+        const response = await fetch(url, options);
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Ошибка запроса.");
+        return body;
+      }
+
+      function populateVoices(language, voices) {
+        const { select, defaultVoice } = voiceSettings[language];
+        const groups = new Map();
+        for (const voice of voices) {
+          const locale = voice.name.split("-").slice(0, 2).join("-");
+          if (!groups.has(locale)) groups.set(locale, []);
+          groups.get(locale).push(voice);
+        }
+
+        select.replaceChildren();
+        for (const [locale, localeVoices] of groups) {
+          const group = document.createElement("optgroup");
+          group.label = locale;
+          for (const voice of localeVoices) {
+            const option = document.createElement("option");
+            const gender = voice.gender === "female" ? "женский" : "мужской";
+            option.value = voice.name;
+            option.textContent = `${voice.name} — ${gender}`;
+            option.title = [voice.categories, voice.personalities].filter(Boolean).join(" · ");
+            group.append(option);
+          }
+          select.append(group);
+        }
+
+        if (voices.some((voice) => voice.name === defaultVoice)) {
+          select.value = defaultVoice;
+        }
+        select.disabled = voices.length === 0;
+        voiceSettings[language].button.disabled = voices.length === 0;
+      }
+
+      async function loadVoices() {
+        try {
+          const voices = await requestJson("/api/voices");
+          populateVoices("ru", voices.ru);
+          populateVoices("en", voices.en);
+          voiceStatus.textContent =
+            `Доступно голосов: русский — ${voices.ru.length}, английский — ${voices.en.length}.`;
+        } catch (loadError) {
+          voiceStatus.textContent = `Не удалось загрузить список голосов: ${loadError.message}`;
+          voiceStatus.style.color = "#b42318";
+        }
+      }
+
+      async function previewVoice(language) {
+        const { select, button, audio } = voiceSettings[language];
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Загрузка...";
+        voiceStatus.textContent = `Генерируется образец: ${select.value}`;
+        voiceStatus.style.color = "";
+
+        try {
+          const response = await fetch("/api/voices/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ language, voice: select.value }),
+          });
+          if (!response.ok) {
+            const body = await response.json();
+            throw new Error(body.error || "Не удалось создать образец.");
+          }
+
+          const blob = await response.blob();
+          const previousUrl = previewUrls.get(language);
+          if (previousUrl) URL.revokeObjectURL(previousUrl);
+          const audioUrl = URL.createObjectURL(blob);
+          previewUrls.set(language, audioUrl);
+          audio.src = audioUrl;
+          audio.hidden = false;
+          voiceStatus.textContent = "Образец готов — прослушайте его перед генерацией.";
+          try {
+            await audio.play();
+          } catch {
+            audio.focus();
+          }
+        } catch (previewError) {
+          voiceStatus.textContent = `Не удалось прослушать голос: ${previewError.message}`;
+          voiceStatus.style.color = "#b42318";
+        } finally {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      }
+
+      voiceSettings.ru.button.addEventListener("click", () => previewVoice("ru"));
+      voiceSettings.en.button.addEventListener("click", () => previewVoice("en"));
+      loadVoices();
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (voiceSettings.ru.select.disabled || voiceSettings.en.select.disabled) {
+          error.textContent = "Список голосов еще не загружен.";
+          return;
+        }
+        generateButton.disabled = true;
+        progress.hidden = false;
+        progress.value = 0;
+        status.textContent = "Отправка задачи...";
+        error.textContent = "";
+        result.hidden = true;
+        player.removeAttribute("src");
+
+        try {
+          const data = await requestJson("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: textInput.value,
+              translationPause: document.querySelector("#translationPause").value,
+              pairPause: document.querySelector("#pairPause").value,
+              ruVoice: document.querySelector("#ruVoice").value,
+              enVoice: document.querySelector("#enVoice").value,
+            }),
+          });
+
+          let finished = false;
+          while (!finished) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            const job = await requestJson(`/api/jobs/${data.jobId}`);
+            progress.value = job.progress;
+            status.textContent = `${job.status} — ${job.progress}%`;
+            if (job.error) throw new Error(job.error);
+            if (job.audioUrl) {
+              player.src = job.audioUrl;
+              download.href = `/api/jobs/${data.jobId}/download`;
+              result.hidden = false;
+              finished = true;
+            }
+          }
+        } catch (requestError) {
+          error.textContent = requestError.message;
+          status.textContent = "Генерация не завершена.";
+        } finally {
+          generateButton.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
